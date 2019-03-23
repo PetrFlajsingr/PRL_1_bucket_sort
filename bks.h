@@ -5,6 +5,31 @@
 #ifndef PRL_1_BKS_H
 #define PRL_1_BKS_H
 
+#include <utility>
+#include <vector>
+#include <memory>
+
+class ProcWorker {
+ public:
+  virtual void run() = 0;
+  virtual ~ProcWorker() = default;
+};
+class Sorter : public ProcWorker {
+ public:
+  void run() override;
+
+ private:
+  std::vector<int> data;
+};
+class Merger : public ProcWorker {
+ public:
+  void run() override;
+
+ private:
+  std::vector<int> data;
+};
+
+
 enum class ProcType {
   Root, Node, List
 };
@@ -26,10 +51,13 @@ class ProcInfo {
   ProcType getType() const;
   friend std::ostream &operator<<(std::ostream &os, const ProcInfo &info);
 
+  std::unique_ptr<ProcWorker> procWorker;
+
  private:
   int id;
   int parentNodeId;
   ProcType type;
+
   /**
    * Calculate interval for node indices.
    */

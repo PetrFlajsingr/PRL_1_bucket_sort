@@ -17,6 +17,7 @@ int main(int, char **) {
   ProcInfo procInfo(procId, procCount);
 
   std::cout << procInfo << std::endl;
+  procInfo.procWorker->run();
 
   MPI_Finalize();
 }
@@ -33,10 +34,13 @@ ProcInfo::ProcInfo(int id, int totalProc) : id(id) {
   if (id == rootId) {
     type = ProcType::Root;
     parentNodeId = -1;
+    procWorker = std::make_unique<Merger>();
   } else if (auto[sIndex, eIndex] = getNodesInterval(totalProc); sIndex <= id && id <= eIndex) {
     type = ProcType::Node;
+    procWorker = std::make_unique<Merger>();
   } else {
     type = ProcType::List;
+    procWorker = std::make_unique<Sorter>();
   }
 }
 int ProcInfo::getId() const {
@@ -55,4 +59,11 @@ std::ostream &operator<<(std::ostream &os, const ProcInfo &info) {
 }
 std::pair<int, int> ProcInfo::getNodesInterval(int totalProc) const {
   return std::make_pair(1, totalProc / 2 - 1);
+}
+void Sorter::run() {
+  std::cout << "Sorter running..." << std::endl;
+}
+
+void Merger::run() {
+  std::cout << "Merger running..." << std::endl;
 }
