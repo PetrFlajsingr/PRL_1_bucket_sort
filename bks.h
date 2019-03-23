@@ -8,43 +8,47 @@
 #include <utility>
 #include <vector>
 #include <memory>
+#include <cmath>
 
 class ProcInfo;
 class ProcWorker {
  public:
-  ProcWorker(ProcInfo *procInfo);
+  explicit ProcWorker(ProcInfo *procInfo);
   virtual void run() = 0;
   virtual ~ProcWorker() = default;
 
  protected:
   ProcInfo *procInfo;
   std::vector<int> data;
+
+  void sendToParent();
+  void receiveFromParent();
 };
 class Sorter : public ProcWorker {
  public:
-  Sorter(ProcInfo *procInfo);
+  explicit Sorter(ProcInfo *procInfo);
   void run() override;
 
  protected:
   void receiveAndSort();
-  void sendToParent();
 };
 class Merger : public ProcWorker {
  public:
-  Merger(ProcInfo *procInfo);
+  explicit Merger(ProcInfo *procInfo);
   void run() override;
 
  protected:
+  void sendToChildren();
   void receiveAndMerge();
-  void sendToParent();
 };
 class RootMerger : public Merger {
  public:
-  RootMerger(ProcInfo *procInfo);
+  explicit RootMerger(ProcInfo *procInfo);
   void run() override;
 
  private:
-  void receiveAndPrint();
+  void readFile();
+  void print();
 };
 
 
@@ -63,6 +67,8 @@ class ProcInfo {
    * @return id of parent process
    */
   int getParentNodeId() const;
+  const std::vector<int> &getChildrenIds() const;
+  int getInputSize() const;
   /**
    * @return type of tree node
    */
@@ -71,10 +77,14 @@ class ProcInfo {
 
   std::unique_ptr<ProcWorker> procWorker;
 
+  static int getTreeLevel(int index);
+
  private:
   int id;
   int parentNodeId;
   ProcType type;
+  std::vector<int> childrenIds;
+  int totalProc;
 
   /**
    * Calculate interval for node indices.
