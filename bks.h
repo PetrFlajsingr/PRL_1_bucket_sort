@@ -90,7 +90,7 @@ class RootMerger : public Merger {
   /*
    * Print this->data to stdout.
    */
-  void print();
+  void print(bool printRow = false);
 };
 
 enum class ProcType {
@@ -124,7 +124,9 @@ class ProcInfo {
    */
   static int getTreeLevel(int index);
 
-  int getTotalProc();
+  int getTotalProc() const;
+
+  std::string toString() const;
 
  private:
   int id;

@@ -6,7 +6,7 @@
 bool Logger::allowLog = false;
 
 int main(int, char **) {
-  Logger::allowLog = true;
+  Logger::allowLog = false;
   MPI_Init(nullptr, nullptr);
 
   int procCount;
@@ -15,7 +15,7 @@ int main(int, char **) {
   MPI_Comm_rank(MPI_COMM_WORLD, &procId);
 
   ProcInfo procInfo(procId, procCount);
-  std::cout << procInfo << std::endl;
+  Logger::log(procInfo.toString());
   procInfo.procWorker->run();
 
   MPI_Finalize();
@@ -65,8 +65,7 @@ int ProcInfo::getInputSize() const {
   return (totalProc + 1) * 2 / static_cast<int>(pow(2, getTreeLevel(id)));
 }
 std::ostream &operator<<(std::ostream &os, const ProcInfo &info) {
-  os << "ProcInfo:: id: " << info.id << ", parentNodeId: " << info.parentNodeId << ", type: "
-     << ProcTypeToString(info.type);
+  os << info.toString();
   return os;
 }
 std::pair<int, int> ProcInfo::getNodesInterval(int totalProc) const {
@@ -75,8 +74,12 @@ std::pair<int, int> ProcInfo::getNodesInterval(int totalProc) const {
 const std::vector<int> &ProcInfo::getChildrenIds() const {
   return childrenIds;
 }
-int ProcInfo::getTotalProc() {
+int ProcInfo::getTotalProc() const {
   return totalProc;
+}
+std::string ProcInfo::toString() const {
+  return "ProcInfo:: id: " + std::to_string(id) + ", parentNodeId: " + std::to_string(parentNodeId)
+      + ", type: " + ProcTypeToString(type);
 }
 //\ ********** ProcInfo **********
 ProcWorker::ProcWorker(ProcInfo *procInfo) : procInfo(procInfo) {}
@@ -158,6 +161,7 @@ void Merger::receiveAndMerge() {
 RootMerger::RootMerger(ProcInfo *procInfo) : Merger(procInfo) {}
 void RootMerger::run() {
   readFile();
+  print(true);
   if (procInfo->getTotalProc() > 1) {
     Merger::sendToChildren();
     data.clear();
@@ -177,11 +181,18 @@ void RootMerger::readFile() {
     data.push_back(-1);
   }
 }
-void RootMerger::print() {
+void RootMerger::print(bool printRow) {
+  char delimiter = '\n';
+  if (printRow) {
+    delimiter = ' ';
+  }
   for (const auto &val : data) {
     if (val != -1) {
-      std::cout << val << std::endl;
+      std::cout << val << delimiter;
     }
+  }
+  if (printRow) {
+    std::cout << "\n";
   }
 }
 //\ ********** RootMerger **********
