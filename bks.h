@@ -9,24 +9,42 @@
 #include <vector>
 #include <memory>
 
+class ProcInfo;
 class ProcWorker {
  public:
+  ProcWorker(ProcInfo *procInfo);
   virtual void run() = 0;
   virtual ~ProcWorker() = default;
+
+ protected:
+  ProcInfo *procInfo;
+  std::vector<int> data;
 };
 class Sorter : public ProcWorker {
  public:
+  Sorter(ProcInfo *procInfo);
   void run() override;
 
- private:
-  std::vector<int> data;
+ protected:
+  void receiveAndSort();
+  void sendToParent();
 };
 class Merger : public ProcWorker {
  public:
+  Merger(ProcInfo *procInfo);
+  void run() override;
+
+ protected:
+  void receiveAndMerge();
+  void sendToParent();
+};
+class RootMerger : public Merger {
+ public:
+  RootMerger(ProcInfo *procInfo);
   void run() override;
 
  private:
-  std::vector<int> data;
+  void receiveAndPrint();
 };
 
 
@@ -64,6 +82,21 @@ class ProcInfo {
   std::pair<int, int> getNodesInterval(int totalProc) const;
 
   const int rootId = 0;
+};
+
+struct Logger {
+  static bool allowLog;
+
+  static void log(const char* msg) {
+    if (!allowLog) {
+      return;
+    }
+    std::cout << msg << std::endl;
+  }
+
+  static void log(const std::string &msg) {
+    log(msg.c_str());
+  }
 };
 
 #endif //PRL_1_BKS_H
