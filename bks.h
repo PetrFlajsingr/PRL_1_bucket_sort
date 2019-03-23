@@ -124,6 +124,8 @@ class ProcInfo {
    */
   static int getTreeLevel(int index);
 
+  int getTotalProc();
+
  private:
   int id;
   int parentNodeId;

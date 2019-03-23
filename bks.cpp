@@ -11,7 +11,6 @@ int main(int, char **) {
 
   int procCount;
   MPI_Comm_size(MPI_COMM_WORLD, &procCount);
-
   int procId;
   MPI_Comm_rank(MPI_COMM_WORLD, &procId);
 
@@ -76,6 +75,9 @@ std::pair<int, int> ProcInfo::getNodesInterval(int totalProc) const {
 const std::vector<int> &ProcInfo::getChildrenIds() const {
   return childrenIds;
 }
+int ProcInfo::getTotalProc() {
+  return totalProc;
+}
 //\ ********** ProcInfo **********
 ProcWorker::ProcWorker(ProcInfo *procInfo) : procInfo(procInfo) {}
 void ProcWorker::sendToParent() {
@@ -116,8 +118,18 @@ void Merger::run() {
 void Merger::sendToChildren() {
   std::vector<int> data1(data.begin(), data.begin() + data.size() / 2);
   std::vector<int> data2(data.begin() + data.size() / 2, data.end());
-  MPI_Send(data1.data(), data1.size(), MPI_INT, procInfo->getChildrenIds()[0], 0, MPI_COMM_WORLD);
-  MPI_Send(data2.data(), data2.size(), MPI_INT, procInfo->getChildrenIds()[1], 0, MPI_COMM_WORLD);
+  MPI_Send(data1.data(),
+           static_cast<int>(data1.size()),
+           MPI_INT,
+           procInfo->getChildrenIds()[0],
+           0,
+           MPI_COMM_WORLD);
+  MPI_Send(data2.data(),
+           static_cast<int>(data2.size()),
+           MPI_INT,
+           procInfo->getChildrenIds()[1],
+           0,
+           MPI_COMM_WORLD);
   Logger::log("Merger sent to children " + std::to_string(procInfo->getChildrenIds()[0]) + " "
                   + std::to_string(procInfo->getChildrenIds()[1]) + ", id "
                   + std::to_string(procInfo->getId()));
@@ -146,9 +158,13 @@ void Merger::receiveAndMerge() {
 RootMerger::RootMerger(ProcInfo *procInfo) : Merger(procInfo) {}
 void RootMerger::run() {
   readFile();
-  Merger::sendToChildren();
-  data.clear();
-  Merger::receiveAndMerge();
+  if (procInfo->getTotalProc() > 1) {
+    Merger::sendToChildren();
+    data.clear();
+    Merger::receiveAndMerge();
+  } else {
+    std::sort(data.begin(), data.end());
+  }
   print();
 }
 void RootMerger::readFile() {
