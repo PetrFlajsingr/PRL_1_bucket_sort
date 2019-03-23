@@ -25,14 +25,23 @@ class ProcWorker {
  protected:
   ProcInfo *procInfo;
   std::vector<int> data;
+  std::vector<std::vector<int>> dataFromChildren;
   /**
    * Send data to parent (procInfo->getParentId())
    */
   void sendToParent();
   /**
-   * Receive data from parent (procInfo->getParentId())
+   * Send data to children, divide them into buckets of equal size for each child.
+   */
+  void sendToChildren();
+  /**
+   * Receive data from parent (procInfo->getParentId()), save to this->data.
    */
   void receiveFromParent();
+  /**
+   * Receive data from children, save the in this->dataFromChildren.
+   */
+  void receiveFromChildren();
 };
 /**
  * Worker used in list processes to sort buckets.
@@ -44,12 +53,6 @@ class Sorter : public ProcWorker {
    * Receive data from parent, sort them using std::sort() and send them back.
    */
   void run() override;
-
- protected:
-  /**
-   * Receive data from parent and sort them.
-   */
-  void receiveAndSort();
 };
 class Merger : public ProcWorker {
  public:
@@ -62,13 +65,9 @@ class Merger : public ProcWorker {
 
  protected:
   /**
-   * Send half of this->data to each child.
+   * Merge data from children to this->data.
    */
-  void sendToChildren();
-  /**
-   * Receive data from both children and merge them to this->data.
-   */
-  void receiveAndMerge();
+  void merge();
 };
 /**
  * Worker for tree root.
@@ -87,7 +86,7 @@ class RootMerger : public Merger {
    * Read binary unsigned 1B data from file "./numbers" and store them in this->data.
    */
   void readFile();
-  /*
+  /**
    * Print this->data to stdout.
    */
   void print(bool printRow = false);
@@ -123,9 +122,10 @@ class ProcInfo {
    * @return level in tree
    */
   static int getTreeLevel(int index);
-
+  /**
+   * @return total amount of processes
+   */
   int getTotalProc() const;
-
   std::string toString() const;
 
  private:
@@ -142,17 +142,17 @@ class ProcInfo {
 
   const int rootId = 0;
 };
-
+/**
+ * Debug logger.
+ */
 struct Logger {
   static bool allowLog;
-
   static void log(const char *msg) {
     if (!allowLog) {
       return;
     }
-    std::cout << msg << std::endl;
+    std::cout << msg << "\n";
   }
-
   static void log(const std::string &msg) {
     log(msg.c_str());
   }

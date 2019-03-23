@@ -85,8 +85,29 @@ std::string ProcInfo::toString() const {
 ProcWorker::ProcWorker(ProcInfo *procInfo) : procInfo(procInfo) {}
 void ProcWorker::sendToParent() {
   MPI_Send(data.data(), data.size(), MPI_INT, procInfo->getParentNodeId(), 0, MPI_COMM_WORLD);
-  Logger::log("ProcWorker sent to parent " + std::to_string(procInfo->getParentNodeId())
+  Logger::log("Sent to parent " + std::to_string(procInfo->getParentNodeId())
                   + ", id " + std::to_string(procInfo->getId()));
+}
+void ProcWorker::sendToChildren() {
+  std::vector<int> data1(data.begin(), data.begin() + data.size() / 2);
+  std::vector<int> data2(data.begin() + data.size() / 2, data.end());
+  int step = data.size() / procInfo->getChildrenIds().size();
+  int startIndex = 0;
+  int endIndex = step;
+  for (auto childId : procInfo->getChildrenIds()) {
+    std::vector<int> toSend(data.begin() + startIndex, data.begin() + endIndex);
+    MPI_Send(toSend.data(),
+             static_cast<int>(toSend.size()),
+             MPI_INT,
+             childId,
+             0,
+             MPI_COMM_WORLD);
+    startIndex = endIndex;
+    endIndex += step;
+  }
+  Logger::log("Merger sent to children " + std::to_string(procInfo->getChildrenIds()[0]) + " "
+                  + std::to_string(procInfo->getChildrenIds()[1]) + ", id "
+                  + std::to_string(procInfo->getId()));
 }
 void ProcWorker::receiveFromParent() {
   auto inSize = procInfo->getInputSize();
@@ -95,65 +116,43 @@ void ProcWorker::receiveFromParent() {
   for (int i = 0; i < inSize; ++i) {
     data.push_back(buffer[i]);
   }
-  Logger::log("ProcWorker received from parent, id " + std::to_string(procInfo->getId()));
+  Logger::log("Received from parent, id " + std::to_string(procInfo->getId()));
+}
+void ProcWorker::receiveFromChildren() {
+  dataFromChildren.clear();
+  auto inSize = procInfo->getInputSize();
+  int buffer[procInfo->getInputSize()];
+  for (auto childId : procInfo->getChildrenIds()) {
+    MPI_Recv(buffer, inSize, MPI_INT, childId, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    std::vector<int> receivedData;
+    for (int j = 0; j < inSize / procInfo->getChildrenIds().size(); ++j) {
+      receivedData.push_back(buffer[j]);
+    }
+    dataFromChildren.push_back(receivedData);
+  }
+  Logger::log("Received from children, id " + std::to_string(procInfo->getId()));
 }
 // ********** Sorter **********
 void Sorter::run() {
-  receiveAndSort();
-  ProcWorker::sendToParent();
-}
-void Sorter::receiveAndSort() {
-  ProcWorker::receiveFromParent();
-  Logger::log("Sorter received, id " + std::to_string(procInfo->getId()));
+  receiveFromParent();
   std::sort(data.begin(), data.end());
+  sendToParent();
 }
 Sorter::Sorter(ProcInfo *procInfo) : ProcWorker(procInfo) {}
 //\ ********** Sorter **********
 // ********** Merger **********
 Merger::Merger(ProcInfo *procInfo) : ProcWorker(procInfo) {}
 void Merger::run() {
-  ProcWorker::receiveFromParent();
+  receiveFromParent();
   sendToChildren();
   data.clear();
-  receiveAndMerge();
-  ProcWorker::sendToParent();
+  receiveFromChildren();
+  merge();
+  sendToParent();
 }
-void Merger::sendToChildren() {
-  std::vector<int> data1(data.begin(), data.begin() + data.size() / 2);
-  std::vector<int> data2(data.begin() + data.size() / 2, data.end());
-  MPI_Send(data1.data(),
-           static_cast<int>(data1.size()),
-           MPI_INT,
-           procInfo->getChildrenIds()[0],
-           0,
-           MPI_COMM_WORLD);
-  MPI_Send(data2.data(),
-           static_cast<int>(data2.size()),
-           MPI_INT,
-           procInfo->getChildrenIds()[1],
-           0,
-           MPI_COMM_WORLD);
-  Logger::log("Merger sent to children " + std::to_string(procInfo->getChildrenIds()[0]) + " "
-                  + std::to_string(procInfo->getChildrenIds()[1]) + ", id "
-                  + std::to_string(procInfo->getId()));
-}
-void Merger::receiveAndMerge() {
-  auto inSize = procInfo->getInputSize();
-  int buffer[inSize];
-  MPI_Recv(buffer, inSize, MPI_INT, procInfo->getChildrenIds()[0], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-  std::vector<int> data1;
-  data1.reserve(inSize);
-  for (int i = 0; i < inSize / 2; ++i) {
-    data1.push_back(buffer[i]);
-  }
-  MPI_Recv(buffer, inSize, MPI_INT, procInfo->getChildrenIds()[1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-  std::vector<int> data2;
-  data2.reserve(inSize);
-  for (int i = 0; i < inSize / 2; ++i) {
-    data2.push_back(buffer[i]);
-  }
-  std::merge(data1.begin(), data1.end(),
-             data2.begin(), data2.end(),
+void Merger::merge() {
+  std::merge(dataFromChildren[0].begin(), dataFromChildren[0].end(),
+             dataFromChildren[1].begin(), dataFromChildren[1].end(),
              std::back_inserter(data));
 }
 //\ ********** Merger **********
@@ -163,9 +162,10 @@ void RootMerger::run() {
   readFile();
   print(true);
   if (procInfo->getTotalProc() > 1) {
-    Merger::sendToChildren();
+    sendToChildren();
     data.clear();
-    Merger::receiveAndMerge();
+    receiveFromChildren();
+    merge();
   } else {
     std::sort(data.begin(), data.end());
   }
@@ -182,17 +182,18 @@ void RootMerger::readFile() {
   }
 }
 void RootMerger::print(bool printRow) {
-  char delimiter = '\n';
-  if (printRow) {
-    delimiter = ' ';
-  }
   for (const auto &val : data) {
     if (val != -1) {
-      std::cout << val << delimiter;
+      std::cout << val;
+      if (printRow) {
+        std::cout << " ";
+      } else {
+        std::cout << std::endl;
+      }
     }
   }
   if (printRow) {
-    std::cout << "\n";
+    std::cout << std::endl;
   }
 }
 //\ ********** RootMerger **********

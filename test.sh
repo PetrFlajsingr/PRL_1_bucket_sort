@@ -22,6 +22,7 @@ else
     pw=$[$(log2 ${numbers})]
     proc_count=$[2**pw - 1]
 fi;
+#echo ${proc_count}
 
 mpic++ -std=c++17 --prefix /usr/local/share/openmpi -o PRL_1 bks.cpp
 
