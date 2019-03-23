@@ -9,6 +9,8 @@
 #include <vector>
 #include <memory>
 #include <cmath>
+#include <string>
+
 
 class ProcInfo;
 /**
@@ -149,26 +151,6 @@ struct Logger {
 
   static void log(const std::string &msg) {
     log(msg.c_str());
-  }
-};
-
-template<typename T>
-class AnalysisVector : public std::vector<T> {
-  static std::size_t accessCounter;
-  static std::mutex accessLock;
-  T &operator[](std::size_t n) {
-    std::unique_lock lck{accessLock};
-    accessCounter++;
-    return std::vector<T>::operator[](n);
-  }
-  const T &operator[](std::size_t n) const {
-    std::unique_lock lck{accessLock};
-    accessCounter++;
-    return std::vector<T>::operator[](n);
-  }
-
-  static std::size_t getAccessCount() {
-    return accessCounter;
   }
 };
 

@@ -4,8 +4,6 @@
 #include <mpi.h>
 #include "bks.h"
 bool Logger::allowLog = false;
-template<typename T>
-std::size_t AnalysisVector<T>::accessCounter = 0;
 
 int main(int, char **) {
   Logger::allowLog = true;
