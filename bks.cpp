@@ -89,8 +89,6 @@ void ProcWorker::sendToParent() {
                   + ", id " + std::to_string(procInfo->getId()));
 }
 void ProcWorker::sendToChildren() {
-  std::vector<int> data1(data.begin(), data.begin() + data.size() / 2);
-  std::vector<int> data2(data.begin() + data.size() / 2, data.end());
   int step = data.size() / procInfo->getChildrenIds().size();
   int startIndex = 0;
   int endIndex = step;
