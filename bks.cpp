@@ -1,10 +1,11 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <algorithm>
 #include <mpi.h>
 #include "bks.h"
 bool Logger::allowLog = false;
+template<typename T>
+std::size_t AnalysisVector<T>::accessCounter = 0;
 
 int main(int, char **) {
   Logger::allowLog = true;
@@ -81,7 +82,8 @@ const std::vector<int> &ProcInfo::getChildrenIds() const {
 ProcWorker::ProcWorker(ProcInfo *procInfo) : procInfo(procInfo) {}
 void ProcWorker::sendToParent() {
   MPI_Send(data.data(), data.size(), MPI_INT, procInfo->getParentNodeId(), 0, MPI_COMM_WORLD);
-  Logger::log("ProcWorker sent to parent, id " + std::to_string(procInfo->getId()));
+  Logger::log("ProcWorker sent to parent " + std::to_string(procInfo->getParentNodeId())
+                  + ", id " + std::to_string(procInfo->getId()));
 }
 void ProcWorker::receiveFromParent() {
   auto inSize = procInfo->getInputSize();
@@ -94,7 +96,6 @@ void ProcWorker::receiveFromParent() {
 }
 // ********** Sorter **********
 void Sorter::run() {
-  //Logger::log("Sorter run start, id " + std::to_string(procInfo->getId()));
   receiveAndSort();
   ProcWorker::sendToParent();
 }
@@ -102,7 +103,6 @@ void Sorter::receiveAndSort() {
   ProcWorker::receiveFromParent();
   Logger::log("Sorter received, id " + std::to_string(procInfo->getId()));
   std::sort(data.begin(), data.end());
-  //Logger::log("Sorter sorted, id " + std::to_string(procInfo->getId()));
 }
 Sorter::Sorter(ProcInfo *procInfo) : ProcWorker(procInfo) {}
 //\ ********** Sorter **********
@@ -120,9 +120,9 @@ void Merger::sendToChildren() {
   std::vector<int> data2(data.begin() + data.size() / 2, data.end());
   MPI_Send(data1.data(), data1.size(), MPI_INT, procInfo->getChildrenIds()[0], 0, MPI_COMM_WORLD);
   MPI_Send(data2.data(), data2.size(), MPI_INT, procInfo->getChildrenIds()[1], 0, MPI_COMM_WORLD);
-  Logger::log("Merger sent to children, id " + std::to_string(procInfo->getId()));
-  Logger::log("Child id0, id " + std::to_string(procInfo->getChildrenIds()[0]));
-  Logger::log("Child id1, id " + std::to_string(procInfo->getChildrenIds()[1]));
+  Logger::log("Merger sent to children " + std::to_string(procInfo->getChildrenIds()[0]) + " "
+                  + std::to_string(procInfo->getChildrenIds()[1]) + ", id "
+                  + std::to_string(procInfo->getId()));
 }
 void Merger::receiveAndMerge() {
   auto inSize = procInfo->getInputSize();
@@ -142,13 +142,11 @@ void Merger::receiveAndMerge() {
   std::merge(data1.begin(), data1.end(),
              data2.begin(), data2.end(),
              std::back_inserter(data));
-  //Logger::log("Merger merged, id " + std::to_string(procInfo->getId()));
 }
 //\ ********** Merger **********
 // ********** RootMerger **********
 RootMerger::RootMerger(ProcInfo *procInfo) : Merger(procInfo) {}
 void RootMerger::run() {
-  //Logger::log("RootMerger run start, id " + std::to_string(procInfo->getId()));
   readFile();
   Merger::sendToChildren();
   data.clear();
@@ -159,13 +157,17 @@ void RootMerger::readFile() {
   std::ifstream ifstream("numbers", std::ios::binary);
   char val;
   while (ifstream.get(val)) {
-    data.push_back(val);
+    data.push_back(static_cast<uint8_t>(val));
   }
-  print();
+  for (int i = data.size(); i < procInfo->getInputSize(); ++i) {
+    data.push_back(-1);
+  }
 }
 void RootMerger::print() {
   for (const auto &val : data) {
-    std::cout << val << std::endl;
+    if (val != -1) {
+      std::cout << val << std::endl;
+    }
   }
 }
 //\ ********** RootMerger **********

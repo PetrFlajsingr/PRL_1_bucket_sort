@@ -11,6 +11,9 @@
 #include <cmath>
 
 class ProcInfo;
+/**
+ * Base class for process execution.
+ */
 class ProcWorker {
  public:
   explicit ProcWorker(ProcInfo *procInfo);
@@ -20,37 +23,73 @@ class ProcWorker {
  protected:
   ProcInfo *procInfo;
   std::vector<int> data;
-
+  /**
+   * Send data to parent (procInfo->getParentId())
+   */
   void sendToParent();
+  /**
+   * Receive data from parent (procInfo->getParentId())
+   */
   void receiveFromParent();
 };
+/**
+ * Worker used in list processes to sort buckets.
+ */
 class Sorter : public ProcWorker {
  public:
   explicit Sorter(ProcInfo *procInfo);
+  /**
+   * Receive data from parent, sort them using std::sort() and send them back.
+   */
   void run() override;
 
  protected:
+  /**
+   * Receive data from parent and sort them.
+   */
   void receiveAndSort();
 };
 class Merger : public ProcWorker {
  public:
   explicit Merger(ProcInfo *procInfo);
+  /**
+   * Receive data from parent, send them to children, receive from children,
+   * merge using std::merge() and send to parent.
+   */
   void run() override;
 
  protected:
+  /**
+   * Send half of this->data to each child.
+   */
   void sendToChildren();
+  /**
+   * Receive data from both children and merge them to this->data.
+   */
   void receiveAndMerge();
 };
+/**
+ * Worker for tree root.
+ */
 class RootMerger : public Merger {
  public:
   explicit RootMerger(ProcInfo *procInfo);
+  /**
+   * Read input data from file, add padding if necessary. Send them to children,
+   * receive from children and print to stdout.
+   */
   void run() override;
 
  private:
+  /**
+   * Read binary unsigned 1B data from file "./numbers" and store them in this->data.
+   */
   void readFile();
+  /*
+   * Print this->data to stdout.
+   */
   void print();
 };
-
 
 enum class ProcType {
   Root, Node, List
@@ -76,7 +115,11 @@ class ProcInfo {
   friend std::ostream &operator<<(std::ostream &os, const ProcInfo &info);
 
   std::unique_ptr<ProcWorker> procWorker;
-
+  /**
+   * Calculate node's level in tree by its index.
+   * @param index index in tree
+   * @return level in tree
+   */
   static int getTreeLevel(int index);
 
  private:
@@ -97,7 +140,7 @@ class ProcInfo {
 struct Logger {
   static bool allowLog;
 
-  static void log(const char* msg) {
+  static void log(const char *msg) {
     if (!allowLog) {
       return;
     }
@@ -106,6 +149,26 @@ struct Logger {
 
   static void log(const std::string &msg) {
     log(msg.c_str());
+  }
+};
+
+template<typename T>
+class AnalysisVector : public std::vector<T> {
+  static std::size_t accessCounter;
+  static std::mutex accessLock;
+  T &operator[](std::size_t n) {
+    std::unique_lock lck{accessLock};
+    accessCounter++;
+    return std::vector<T>::operator[](n);
+  }
+  const T &operator[](std::size_t n) const {
+    std::unique_lock lck{accessLock};
+    accessCounter++;
+    return std::vector<T>::operator[](n);
+  }
+
+  static std::size_t getAccessCount() {
+    return accessCounter;
   }
 };
 
