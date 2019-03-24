@@ -10,6 +10,7 @@
 #include <memory>
 #include <cmath>
 #include <string>
+#include <algorithm>
 
 
 class ProcInfo;
@@ -34,6 +35,8 @@ class ProcWorker {
    * Send data to children, divide them into buckets of equal size for each child.
    */
   void sendToChildren();
+
+  void sendToLists();
   /**
    * Receive data from parent (procInfo->getParentId()), save to this->data.
    */
@@ -42,6 +45,8 @@ class ProcWorker {
    * Receive data from children, save the in this->dataFromChildren.
    */
   void receiveFromChildren();
+
+  void receiveFromRoot();
 };
 /**
  * Worker used in list processes to sort buckets.
@@ -92,28 +97,11 @@ class RootMerger : public Merger {
   void print(bool printRow = false);
 };
 
-enum class ProcType {
-  Root, Node, List
-};
-std::string ProcTypeToString(ProcType procType);
 class ProcInfo {
  public:
   ProcInfo(int id, int totalProc);
-  /**
-   * @return unique process id
-   */
-  int getId() const;
-  /**
-   * @return id of parent process
-   */
-  int getParentNodeId() const;
-  const std::vector<int> &getChildrenIds() const;
+
   int getInputSize() const;
-  /**
-   * @return type of tree node
-   */
-  ProcType getType() const;
-  friend std::ostream &operator<<(std::ostream &os, const ProcInfo &info);
 
   std::unique_ptr<ProcWorker> procWorker;
   /**
@@ -122,16 +110,18 @@ class ProcInfo {
    * @return level in tree
    */
   static int getTreeLevel(int index);
-  /**
-   * @return total amount of processes
-   */
-  int getTotalProc() const;
-  std::string toString() const;
 
- private:
+  std::vector<int> getListIds() const {
+    auto[sIndex, eIndex] = getNodesInterval(totalProc);
+    std::vector<int> result;
+    for (int i = eIndex + 1; i < totalProc; ++i) {
+      result.push_back(i);
+    }
+    return result;
+  }
+
   int id;
   int parentNodeId;
-  ProcType type;
   std::vector<int> childrenIds;
   int totalProc;
 
@@ -142,20 +132,6 @@ class ProcInfo {
 
   const int rootId = 0;
 };
-/**
- * Debug logger.
- */
-struct Logger {
-  static bool allowLog;
-  static void log(const char *msg) {
-    if (!allowLog) {
-      return;
-    }
-    std::cout << msg << "\n";
-  }
-  static void log(const std::string &msg) {
-    log(msg.c_str());
-  }
-};
+
 
 #endif //PRL_1_BKS_H
