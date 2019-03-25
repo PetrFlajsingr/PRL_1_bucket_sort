@@ -47,6 +47,10 @@ class ProcWorker {
   void receiveFromChildren();
 
   void receiveFromRoot();
+
+  void sendDataSize(int destRank, int size);
+
+  int receiveDataSize(int srcRank);
 };
 /**
  * Worker used in list processes to sort buckets.
@@ -101,8 +105,6 @@ class ProcInfo {
  public:
   ProcInfo(int id, int totalProc);
 
-  int getInputSize() const;
-
   std::unique_ptr<ProcWorker> procWorker;
   /**
    * Calculate node's level in tree by its index.
@@ -111,14 +113,7 @@ class ProcInfo {
    */
   static int getTreeLevel(int index);
 
-  std::vector<int> getListIds() const {
-    auto[sIndex, eIndex] = getNodesInterval(totalProc);
-    std::vector<int> result;
-    for (int i = eIndex + 1; i < totalProc; ++i) {
-      result.push_back(i);
-    }
-    return result;
-  }
+  std::vector<int> getListIds() const;
 
   int id;
   int parentNodeId;

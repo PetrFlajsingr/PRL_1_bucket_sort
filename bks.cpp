@@ -1,7 +1,10 @@
-#include <iostream>
+//
+// Created by Petr Flajsingr on 2019-03-23.
+//
+
+#include <mpi.h>
 #include <fstream>
 #include <vector>
-#include <mpi.h>
 #include "bks.h"
 
 int main(int, char **) {
@@ -25,7 +28,8 @@ ProcInfo::ProcInfo(int id, int totalProc) : id(id), totalProc(totalProc) {
     parentNodeId = -1;
     procWorker = std::make_unique<RootMerger>(this);
     childrenIds = {1, 2};
-  } else if (auto[sIndex, eIndex] = getNodesInterval(totalProc); sIndex <= id && id <= eIndex) {
+  } else if (auto[sIndex, eIndex] = getNodesInterval(totalProc);
+      sIndex <= id && id <= eIndex) {
     procWorker = std::make_unique<Merger>(this);
     childrenIds = {id * 2 + 1, id * 2 + 2};
   } else {
@@ -39,23 +43,30 @@ int ProcInfo::getTreeLevel(int index) {
     return getTreeLevel((index - 1) / 2) + 1;
   }
 }
-int ProcInfo::getInputSize() const {
-  return (totalProc + 1) * 2 / static_cast<int>(pow(2, getTreeLevel(id)));
-}
 std::pair<int, int> ProcInfo::getNodesInterval(int totalProc) const {
   return std::make_pair(1, totalProc / 2 - 1);
+}
+std::vector<int> ProcInfo::getListIds() const {
+  auto[sIndex, eIndex] = getNodesInterval(totalProc);
+  std::vector<int> result;
+  for (int i = eIndex + 1; i < totalProc; ++i) {
+    result.push_back(i);
+  }
+  return result;
 }
 //\ ********** ProcInfo **********
 ProcWorker::ProcWorker(ProcInfo *procInfo) : procInfo(procInfo) {}
 void ProcWorker::sendToParent() {
-  MPI_Send(data.data(), data.size(), MPI_INT, procInfo->parentNodeId, 0, MPI_COMM_WORLD);
+  sendDataSize(procInfo->parentNodeId, data.size());
+  MPI_Send(data.data(), static_cast<int>(data.size()), MPI_INT, procInfo->parentNodeId, 0, MPI_COMM_WORLD);
 }
 void ProcWorker::sendToChildren() {
-  int step = data.size() / procInfo->childrenIds.size();
+  int step = static_cast<int>(data.size() / procInfo->childrenIds.size());
   int startIndex = 0;
   int endIndex = step;
   for (const auto childId : procInfo->childrenIds) {
     std::vector<int> toSend(data.begin() + startIndex, data.begin() + endIndex);
+    sendDataSize(childId, toSend.size());
     MPI_Send(toSend.data(),
              static_cast<int>(toSend.size()),
              MPI_INT,
@@ -68,11 +79,12 @@ void ProcWorker::sendToChildren() {
 }
 void ProcWorker::sendToLists() {
   auto listIds = procInfo->getListIds();
-  int step = data.size() / listIds.size();
+  int step = static_cast<int>(data.size() / listIds.size());
   int startIndex = 0;
   int endIndex = step;
   for (const auto listId : listIds) {
     std::vector<int> toSend(data.begin() + startIndex, data.begin() + endIndex);
+    sendDataSize(listId, toSend.size());
     MPI_Send(toSend.data(),
              static_cast<int>(toSend.size()),
              MPI_INT,
@@ -84,8 +96,8 @@ void ProcWorker::sendToLists() {
   }
 }
 void ProcWorker::receiveFromParent() {
-  auto inSize = procInfo->getInputSize();
-  int buffer[procInfo->getInputSize()];
+  auto inSize = receiveDataSize(procInfo->parentNodeId);
+  int buffer[inSize];
   MPI_Recv(buffer, inSize, MPI_INT, procInfo->parentNodeId, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   for (int i = 0; i < inSize; ++i) {
     data.push_back(buffer[i]);
@@ -93,24 +105,32 @@ void ProcWorker::receiveFromParent() {
 }
 void ProcWorker::receiveFromChildren() {
   dataFromChildren.clear();
-  auto inSize = procInfo->getInputSize();
-  int buffer[procInfo->getInputSize()];
   for (auto childId : procInfo->childrenIds) {
+    auto inSize = receiveDataSize(childId);
+    int buffer[inSize];
     MPI_Recv(buffer, inSize, MPI_INT, childId, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     std::vector<int> receivedData;
-    for (int j = 0; j < inSize / procInfo->childrenIds.size(); ++j) {
+    for (int j = 0; j < inSize; ++j) {
       receivedData.push_back(buffer[j]);
     }
     dataFromChildren.push_back(receivedData);
   }
 }
 void ProcWorker::receiveFromRoot() {
-  auto inSize = procInfo->getInputSize();
+  auto inSize = receiveDataSize(procInfo->rootId);
   int buffer[inSize];
   MPI_Recv(buffer, inSize, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   for (int i = 0; i < inSize; ++i) {
     data.push_back(buffer[i]);
   }
+}
+void ProcWorker::sendDataSize(int destRank, int size) {
+  MPI_Send(&size, 1, MPI_INT, destRank, 0, MPI_COMM_WORLD);
+}
+int ProcWorker::receiveDataSize(int srcRank) {
+  int result;
+  MPI_Recv(&result, 1, MPI_INT, srcRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  return result;
 }
 // ********** Sorter **********
 void Sorter::run() {
@@ -155,7 +175,7 @@ void RootMerger::readFile() {
   while (ifstream.get(val)) {
     data.push_back(static_cast<uint8_t>(val));
   }
-  for (int i = data.size(); i < procInfo->getInputSize(); ++i) {
+  for (int i = 0; i < data.size() % procInfo->getListIds().size(); ++i) {
     data.push_back(-1);
   }
 }

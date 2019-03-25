@@ -28,4 +28,4 @@ mpic++ -std=c++17 --prefix /usr/local/share/openmpi -o PRL_1 bks.cpp
 
 mpirun --prefix /usr/local/share/openmpi -np ${proc_count} ./PRL_1
 
-rm -f numbers
+#rm -f numbers
